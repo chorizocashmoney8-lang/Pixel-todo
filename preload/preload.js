@@ -17,6 +17,19 @@ contextBridge.exposeInMainWorld('pixelApi', {
   skipBreak: () => ipcRenderer.invoke('pomodoro:skipBreak'),
   setPrefs: (patch) => ipcRenderer.invoke('prefs:set', patch),
   openApp: () => ipcRenderer.invoke('window:openApp'),
+  minimizeApp: () => ipcRenderer.invoke('window:minimizeApp'),
+  hideApp: () => ipcRenderer.invoke('window:hideApp'),
+  hideWidget: () => ipcRenderer.invoke('window:hideWidget'),
+  finishPomodoro: () => ipcRenderer.invoke('pomodoro:finish'),
+  importSound: () => ipcRenderer.invoke('sound:import'),
+  getSoundUrl: () => ipcRenderer.invoke('sound:url'),
+  getAlert: () => ipcRenderer.invoke('alert:get'),
+  acknowledgeAlert: () => ipcRenderer.invoke('alert:acknowledge'),
+  onActivityChanged: (cb) => {
+    const listener = (_event, value) => cb(value);
+    ipcRenderer.on('window:activity', listener);
+    return () => ipcRenderer.removeListener('window:activity', listener);
+  },
   onPomodoroAlert: (cb) => {
     const listener = (_event, kind) => cb(kind);
     ipcRenderer.on('pomodoro:alert', listener);

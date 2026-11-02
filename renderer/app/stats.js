@@ -1,47 +1,28 @@
-// 完整窗口 · 统计页:今天/本周/全部的番茄钟数,按学习内容汇总,最近 20 条记录。
-(function () {
-  var L = window.PixelLogic;
-  var RECENT_MAX = 20;
-
-  function $(id) { return document.getElementById(id); }
-
-  function cell(tag, text) {
-    var e = document.createElement(tag);
-    e.textContent = text;
-    return e;
-  }
-
+(() => {
+  'use strict';
+  const A = window.PixelApp, { $, element: el, L } = A;
+  let renderKey = '';
   function render(state) {
-    var c = L.countPomodoros(state.pomodoros, new Date());
-    $('stat-today').textContent = String(c.today);
-    $('stat-week').textContent = String(c.week);
-    $('stat-total').textContent = String(c.total);
-
-    var topics = Object.keys(c.byTopic).sort(function (a, b) {
-      return c.byTopic[b] - c.byTopic[a] || (a < b ? -1 : 1);
-    });
-    var tbody = $('stat-topics');
-    tbody.textContent = '';
-    topics.forEach(function (name) {
-      var tr = document.createElement('tr');
-      tr.appendChild(cell('td', name));
-      tr.appendChild(cell('td', String(c.byTopic[name])));
-      tbody.appendChild(tr);
-    });
-    $('stat-topics-empty').hidden = topics.length > 0;
-
-    var recent = state.pomodoros.slice().sort(function (a, b) { return b.endedAt - a.endedAt; }).slice(0, RECENT_MAX);
-    var list = $('stat-recent');
-    list.textContent = '';
-    recent.forEach(function (p) {
-      var li = document.createElement('li');
-      li.appendChild(cell('span', L.formatDateTime(p.endedAt)));
-      li.appendChild(cell('span', p.topic));
-      list.appendChild(li);
-    });
-    $('stat-recent-empty').hidden = recent.length > 0;
+    const key = JSON.stringify([state.pomodoros, L.todayString(new Date())]);
+    if (key === renderKey) return;
+    renderKey = key;
+    const counts = L.countPomodoros(state.pomodoros, new Date());
+    $('statCards').replaceChildren(...['today', 'week', 'total'].map((name, index) => {
+      const card = el('div', 'stat-card'); card.append(el('strong', '', counts[name]), el('span', '', ['今天', '本周', '全部'][index])); return card;
+    }));
+    const topics = new Map();
+    state.pomodoros.forEach(record => { const name = record.topic || '未命名专注'; topics.set(name, (topics.get(name) || 0) + 1); });
+    $('topicStats').replaceChildren(...Array.from(topics).sort((a, b) => b[1] - a[1]).map(([topic, count]) => {
+      const row = el('div', 'stat-line'); row.append(el('span', '', topic), el('span', '', `${count} 个`)); return row;
+    }));
+    $('topicStatsEmpty').hidden = topics.size > 0;
+    const recent = state.pomodoros.slice().sort((a, b) => b.endedAt - a.endedAt).slice(0, 20);
+    $('recentStats').replaceChildren(...recent.map(record => {
+      const row = el('div', 'recent-line'); const info = el('div', '');
+      info.append(el('div', '', record.topic || '未命名专注'), el('small', '', record.completion === 'manual' ? '手动完成 · 1 次' : '自然完成 · 25 分钟'));
+      row.append(info, el('small', '', L.formatDateTime(record.endedAt))); return row;
+    }));
+    $('recentStatsEmpty').hidden = recent.length > 0;
   }
-
-  window.PixelViews = window.PixelViews || {};
-  window.PixelViews.stats = { render: render };
+  A.views.stats = { init() {}, render };
 })();

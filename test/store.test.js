@@ -16,16 +16,16 @@ test('文件不存在时得到空状态,并在磁盘上生成文件', () => {
   const dir = tmpDir();
   const store = createStore(dir);
   assert.deepStrictEqual(store.get(), emptyState());
-  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, FILE), 'utf8')).version, 3);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, FILE), 'utf8')).version, 4);
 });
 
 test('emptyState 的初始值', () => {
   const s = emptyState();
-  assert.strictEqual(s.version, 3);
+  assert.strictEqual(s.version, 4);
   assert.deepStrictEqual(s.tasks, []);
   assert.deepStrictEqual(s.pomodoros, []);
   assert.deepStrictEqual(s.timer, { phase: 'idle', topic: '', endAt: null, pausedLeftMs: null });
-  assert.deepStrictEqual(s.prefs, { alwaysOnTop: false, widgetCount: 4, recentTopics: [] });
+  assert.deepStrictEqual(s.prefs, { theme: 0, font: 'pixel', buddy: true, idleMode: 'fixed', face: 0, pose: 0, animate: true, sound: 'clear-extended', volume: 25, autoStart: true, alwaysOnTop: false, widgetCount: 4, recentTopics: [] });
 });
 
 test('update 之后新建同目录的 store 能读回', () => {
@@ -63,7 +63,7 @@ test('文件内容损坏时改名备份并用空状态启动', () => {
   assert.deepStrictEqual(store.get(), emptyState());
   assert.ok(fs.existsSync(path.join(dir, FILE + '.corrupt-123456')));
   assert.strictEqual(fs.readFileSync(path.join(dir, FILE + '.corrupt-123456'), 'utf8'), '{bad');
-  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, FILE), 'utf8')).version, 3);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, FILE), 'utf8')).version, 4);
 });
 
 test('空文件同样按损坏处理', () => {
@@ -84,6 +84,43 @@ test('JSON 合法但缺少必要字段时,缺的字段用默认值补齐', () =>
   assert.strictEqual(s.prefs.widgetCount, 4);
 });
 
+test('v3 迁移保留全部数据和已有偏好,补默认值并只备份一次', () => {
+  const dir = tmpDir();
+  const source = {
+    version: 3,
+    tasks: [{ id: 'kept-task', text: '保留', deletedAt: null }],
+    pomodoros: [{ id: 'kept-pomodoro', topic: '高数', startedAt: 100, endedAt: 200 }],
+    timer: { phase: 'paused', topic: '英语', endAt: null, pausedLeftMs: 5000 },
+    prefs: { theme: 6, sound: 'custom', customSoundName: 'local-track.wav', volume: 73,
+      alwaysOnTop: true, widgetPos: { x: 30, y: 40 }, widgetCount: 2, recentTopics: ['英语'] },
+  };
+  const file = path.join(dir, FILE);
+  const backup = file + '.v3.bak';
+  const original = JSON.stringify(source);
+  fs.writeFileSync(file, original);
+
+  const migrated = createStore(dir).get();
+  assert.strictEqual(migrated.version, 4);
+  assert.deepStrictEqual(migrated.tasks, source.tasks);
+  assert.deepStrictEqual(migrated.pomodoros, source.pomodoros);
+  assert.deepStrictEqual(migrated.timer, source.timer);
+  assert.deepStrictEqual(migrated.prefs, {
+    theme: 6, font: 'pixel', buddy: true, idleMode: 'fixed', face: 0, pose: 0,
+    animate: true, sound: 'custom', volume: 73, autoStart: true,
+    alwaysOnTop: true, widgetPos: { x: 30, y: 40 }, widgetCount: 2,
+    recentTopics: ['英语'], customSoundName: 'local-track.wav',
+  });
+  assert.strictEqual(fs.readFileSync(backup, 'utf8'), original);
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).version, 4);
+
+  createStore(dir);
+  assert.strictEqual(fs.readFileSync(backup, 'utf8'), original);
+  fs.writeFileSync(backup, 'keep existing backup');
+  fs.writeFileSync(file, original);
+  createStore(dir);
+  assert.strictEqual(fs.readFileSync(backup, 'utf8'), 'keep existing backup');
+});
+
 test('启动时清理回收站里超过 7 天的任务,保留 6 天的', () => {
   const dir = tmpDir();
   const now = 1000 * DAY;
@@ -99,4 +136,14 @@ test('启动时清理回收站里超过 7 天的任务,保留 6 天的', () => {
   assert.deepStrictEqual(ids, ['recent', 'live']);
   const onDisk = JSON.parse(fs.readFileSync(path.join(dir, FILE), 'utf8'));
   assert.deepStrictEqual(onDisk.tasks.map((t) => t.id), ['recent', 'live']);
+});
+
+
+test('已有 v4 偏好包括 false 和 0 重启后保留,新状态不生成 v3 备份', () => {
+  const dir = tmpDir();
+  const store = createStore(dir);
+  store.update(s => { Object.assign(s.prefs, { theme: 0, buddy: false, animate: false, volume: 0, autoStart: false }); });
+  const expected = store.get();
+  assert.deepStrictEqual(createStore(dir).get(), expected);
+  assert.deepStrictEqual(fs.readdirSync(dir), [FILE]);
 });

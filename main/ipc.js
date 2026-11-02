@@ -6,6 +6,27 @@ const PRIORITIES = ['high', 'mid', 'low'];
 const WIDGET_COUNT_MIN = 1;
 const WIDGET_COUNT_MAX = 8;
 
+const isBoolean = (value) => typeof value === 'boolean';
+const integerIn = (min, max) => (value) => Number.isInteger(value) && value >= min && value <= max;
+const oneOf = (values) => (value) => values.includes(value);
+const PREF_VALIDATORS = {
+  theme: integerIn(0, 6),
+  font: oneOf(['pixel', 'system']),
+  buddy: isBoolean,
+  idleMode: oneOf(['fixed', 'random']),
+  face: integerIn(0, 3),
+  pose: integerIn(0, 1),
+  animate: isBoolean,
+  sound: oneOf(['soft-pixel', 'clear-extended', 'bubble-response', 'custom']),
+  volume: (value) => Number.isFinite(value) && value >= 0 && value <= 100,
+  autoStart: isBoolean,
+  alwaysOnTop: isBoolean,
+  widgetCount: integerIn(WIDGET_COUNT_MIN, WIDGET_COUNT_MAX),
+  widgetPos: (value) => value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.hasOwn(value, 'x') && Object.hasOwn(value, 'y') &&
+    Number.isFinite(value.x) && Number.isFinite(value.y),
+};
+
 function validPriority(p) {
   return PRIORITIES.indexOf(p) !== -1;
 }
@@ -93,23 +114,23 @@ function createHandlers(store, timer, now, notify) {
     },
 
     setPrefs(patch) {
-      change((s) => {
-        if (typeof patch.alwaysOnTop === 'boolean') s.prefs.alwaysOnTop = patch.alwaysOnTop;
-        if (Number.isInteger(patch.widgetCount) &&
-            patch.widgetCount >= WIDGET_COUNT_MIN && patch.widgetCount <= WIDGET_COUNT_MAX) {
-          s.prefs.widgetCount = patch.widgetCount;
-        }
-        const pos = patch.widgetPos;
-        if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-          s.prefs.widgetPos = { x: pos.x, y: pos.y };
-        }
-      });
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return;
+      const accepted = {};
+      for (const [key, validate] of Object.entries(PREF_VALIDATORS)) {
+        if (!Object.hasOwn(patch, key) || !validate(patch[key])) continue;
+        const value = patch[key];
+        accepted[key] = key === 'widgetPos' ? { x: value.x, y: value.y } : value;
+      }
+      // customSoundName 及文件路径仅由主进程音频导入 handler 写入。
+      if (Object.keys(accepted).length === 0) return;
+      change((s) => { Object.assign(s.prefs, accepted); });
     },
 
     startPomodoro: (topic) => timer.start(topic),
     pausePomodoro: () => timer.pause(),
     resumePomodoro: () => timer.resume(),
     abandonPomodoro: () => timer.abandon(),
+    finishPomodoro: () => timer.finishNow(),
     skipBreak: () => timer.skipBreak(),
   };
 }
@@ -129,6 +150,7 @@ function register(ipcMain, h) {
     'pomodoro:pause': () => h.pausePomodoro(),
     'pomodoro:resume': () => h.resumePomodoro(),
     'pomodoro:abandon': () => h.abandonPomodoro(),
+    'pomodoro:finish': () => h.finishPomodoro(),
     'pomodoro:skipBreak': () => h.skipBreak(),
     'prefs:set': (patch) => h.setPrefs(patch),
   };

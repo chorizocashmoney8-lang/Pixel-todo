@@ -1,71 +1,39 @@
-// 角落小窗口:只读展示最前几条待办,番茄钟运行时多显示一行剩余时间。
 (function () {
-  var L = window.PixelLogic;
-  var listEl = document.getElementById('list');
-  var emptyEl = document.getElementById('empty');
-  var pomoEl = document.getElementById('pomodoro');
-  var state = null;
-  var clockTimer = null;
-
-  function renderList() {
-    var lines = L.widgetLines(state.tasks, state.prefs.widgetCount);
-    listEl.textContent = '';
-    lines.forEach(function (line) {
-      var li = document.createElement('li');
-      li.textContent = line; // 任务名只当纯文本写入
-      listEl.appendChild(li);
-    });
-    emptyEl.hidden = lines.length > 0;
+  const api = window.pixelApi, L = window.PixelLogic, A = window.PixelAppearance;
+  let state = null, clockId = null, bubbleId = null, sentence = 0;
+  const $ = id => document.getElementById(id);
+  function tick() {
+    if (!state) return;
+    const t = state.timer, label = {idle:'待开始', focus:'专注中', paused:'已暂停', break:'休息中'}[t.phase];
+    const ms = t.phase === 'idle' ? 1500000 : t.phase === 'paused' ? t.pausedLeftMs : Math.max(0,t.endAt-Date.now());
+    $('clock').textContent = label + ' · ' + L.formatClock(ms);
   }
-
-  function renderPomodoro() {
-    var t = state.timer;
-    var label = { focus: '学习中', break: '休息中', paused: '已暂停' }[t.phase];
-    if (!label) {
-      pomoEl.hidden = true;
-      return;
-    }
-    var left = t.phase === 'paused' ? t.pausedLeftMs : t.endAt - Date.now();
-    pomoEl.textContent = L.formatClock(left) + ' ' + label;
-    pomoEl.classList.toggle('running', t.phase === 'focus' || t.phase === 'break');
-    pomoEl.hidden = false;
+  function speak() {
+    if (!state) return;
+    const tasks = L.sortTasks(state.tasks.filter(t => !t.done && t.deletedAt == null));
+    const messages = state.timer.phase === 'break' ? ['休息一下吧。','要不要起来走走？'] : tasks.length ? ['还剩 '+tasks.length+' 件，先做一件就好。', '接下来是“'+L.truncateText(tasks[0].text,10)+'”。','专心一小会儿，我在这里陪你。'] : ['今天的待办都完成啦。','今天也辛苦啦。'];
+    $('bubble').textContent = messages[sentence++ % messages.length];
   }
-
-  // 只在番茄钟运行且窗口可见时才每秒刷新,否则不留任何定时器。
-  function syncClock() {
-    var running = state && state.timer.phase !== 'idle' && !document.hidden;
-    if (running && clockTimer === null) {
-      clockTimer = setInterval(renderPomodoro, 1000);
-    } else if (!running && clockTimer !== null) {
-      clearInterval(clockTimer);
-      clockTimer = null;
-    }
+  function sync() {
+    const visible = !document.hidden;
+    const run = visible && state && ['focus','break'].includes(state.timer.phase);
+    if (run && clockId === null) clockId = setInterval(tick,1000);
+    if (!run && clockId !== null) { clearInterval(clockId); clockId=null; }
+    const chat = visible && state && state.prefs.buddy && state.prefs.animate && A.isActive();
+    if (chat && bubbleId === null) bubbleId = setInterval(speak,12000);
+    if (!chat && bubbleId !== null) { clearInterval(bubbleId); bubbleId=null; }
   }
-
   function render(next) {
-    state = next;
-    renderList();
-    renderPomodoro();
-    syncClock();
+    state=next; A.apply(next.prefs); $('buddyRow').hidden=!next.prefs.buddy;
+    const tasks=L.sortTasks(next.tasks.filter(t=>!t.done&&t.deletedAt==null)); $('count').textContent=tasks.length+' 件';
+    $('list').replaceChildren();
+    tasks.slice(0,2).forEach(t=>{const row=document.createElement('div'); row.className='task'; const title=document.createElement('span'); title.textContent='▫ '+t.text; row.title=t.text; const due=document.createElement('small'); due.textContent=L.dueLabel(t.dueDate,L.todayString(new Date())); row.append(title,due); $('list').append(row);});
+    if(!tasks.length){const p=document.createElement('div');p.className='empty';p.textContent='暂无待办';$('list').append(p);}
+    $('buddy').classList.toggle('focus',next.timer.phase==='focus');$('buddy').classList.toggle('break',next.timer.phase==='break');
+    document.dispatchEvent(new Event('pixel-prefs')); tick();speak();sync();
   }
-
-  // 过了午夜,"明天"变成"今天"等文案需要重算;这里的行只带月-日,所以只需在唤醒时重画。
-  document.addEventListener('visibilitychange', function () {
-    if (state) render(state);
-  });
-
-  document.getElementById('open').addEventListener('click', function () {
-    window.pixelApi.openApp();
-  });
-
-  // 番茄钟自然走完:窗口整体闪几下,让只开着小窗口学习的人也能注意到。
-  window.pixelApi.onPomodoroAlert(function () {
-    var root = document.querySelector('.inner');
-    root.classList.remove('alert');
-    void root.offsetWidth;
-    root.classList.add('alert');
-  });
-
-  window.pixelApi.onStateChanged(render);
-  window.pixelApi.getState().then(render);
+  $('hide').onclick=e=>{e.stopPropagation();api.hideWidget();}; $('widget').onclick=e=>{if(!e.target.closest('.dragmark'))api.openApp();};
+  A.startBuddy($('buddy'),()=>state&&state.prefs);
+  document.addEventListener('visibilitychange',()=>{tick();sync();}); api.onActivityChanged(sync);
+  api.onStateChanged(render);api.getState().then(render);
 })();

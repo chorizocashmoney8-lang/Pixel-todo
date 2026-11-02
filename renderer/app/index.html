@@ -2,140 +2,146 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data:; font-src 'self'">
   <title>Pixel Todo</title>
-  <link rel="stylesheet" href="../shared/pixel.css">
-  <link rel="stylesheet" href="../shared/anim.css">
+  <link rel="stylesheet" href="../shared/appearance.css">
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
-  <div class="page">
-    <header class="top">
-      <h1>PIXEL·TODO</h1>
-      <nav class="tabs" aria-label="页面">
-        <button type="button" class="tab" data-view="todo" aria-pressed="true">待办</button>
-        <button type="button" class="tab" data-view="pomodoro" aria-pressed="false">番茄钟</button>
-        <button type="button" class="tab" data-view="stats" aria-pressed="false">统计</button>
+  <div class="app-shell" id="appShell" aria-label="Pixel Todo 完整窗口">
+    <header class="appbar">
+      <strong class="brand"><span class="brand-pixel" aria-hidden="true"></span>PIXEL·TODO</strong>
+      <nav class="main-nav" aria-label="页面切换">
+        <button type="button" class="nav-button" data-view="todo" aria-pressed="true">待办</button>
+        <button type="button" class="nav-button" data-view="pomodoro" aria-pressed="false">番茄钟</button>
+        <button type="button" class="nav-button" data-view="stats" aria-pressed="false">统计</button>
+        <button type="button" class="nav-button" data-view="settings" aria-pressed="false">设置</button>
       </nav>
-      <button type="button" id="settings-btn" class="icon-btn" aria-label="设置">⚙</button>
+      <span id="headerPhase" class="header-phase">等你开始</span>
+      <button type="button" class="window-control" id="minimizeApp" aria-label="收起为小窗口" title="收起为小窗口">−</button>
+      <button type="button" class="window-control" id="hideApp" aria-label="隐藏完整窗口" title="隐藏完整窗口">×</button>
     </header>
 
-    <main>
-      <section id="view-todo" class="view">
-        <form id="add-form" class="add-form" autocomplete="off">
-          <input id="add-input" type="text" placeholder="> 输入任务,回车添加  ( / 聚焦 )" aria-label="新任务">
-          <button type="submit" class="btn">添加</button>
+    <main class="app-content">
+      <section id="view-todo" class="view" aria-labelledby="todo-title">
+        <div class="view-heading">
+          <div>
+            <span class="eyebrow">海子《面朝大海，春暖花开》</span>
+            <h1 id="todo-title">从明天起，做一个幸福的人。</h1>
+          </div>
+          <div class="day-progress"><strong id="taskProgress">0 / 0</strong><span>件事已完成</span></div>
+        </div>
+        <form id="addForm" class="add-form" autocomplete="off">
+          <input id="taskInput" maxlength="120" required placeholder="＋ 记下接下来想做的事…" aria-label="新任务">
+          <select id="newPriority" aria-label="新任务优先级">
+            <option value="high">高优先</option><option value="mid" selected>中优先</option><option value="low">低优先</option>
+          </select>
+          <input id="newDue" type="date" aria-label="新任务截止日期">
+          <button class="btn primary" type="submit">添加</button>
         </form>
-        <div class="counts" id="counts"></div>
-        <div class="toolbar">
-          <div class="filters" role="group" aria-label="筛选">
-            <button type="button" class="btn small" data-filter="all" aria-pressed="true">全部</button>
-            <button type="button" class="btn small" data-filter="active" aria-pressed="false">未完成</button>
-            <button type="button" class="btn small" data-filter="done" aria-pressed="false">已完成</button>
+        <div class="list-toolbar">
+          <div class="filters" role="group" aria-label="任务筛选">
+            <button type="button" data-filter="all" aria-pressed="true">全部 <span id="countAll">0</span></button>
+            <button type="button" data-filter="open" aria-pressed="false">未完成 <span id="countOpen">0</span></button>
+            <button type="button" data-filter="done" aria-pressed="false">已完成 <span id="countDone">0</span></button>
+            <button type="button" data-filter="trash" aria-pressed="false">回收站 <span id="countTrash">0</span></button>
           </div>
-          <div class="actions">
-            <button type="button" id="clear-done" class="btn small">清除已完成</button>
-            <button type="button" id="open-trash" class="btn small">回收站 <span id="trash-count">0</span></button>
-          </div>
+          <button type="button" id="clearDone" class="btn quiet small">清除已完成</button>
         </div>
-        <ul id="task-list" class="task-list"></ul>
-        <p id="task-empty" class="muted" hidden>还没有任务</p>
+        <div id="taskList" class="task-list" aria-live="polite"></div>
+        <p id="taskEmpty" class="empty-state" hidden>还没有任务，写下今天想完成的一件事吧。</p>
       </section>
 
-      <section id="view-pomodoro" class="view" hidden data-phase="idle">
-        <div class="pomo-card">
-          <div id="pomo-phase" class="pomo-phase">待开始</div>
-          <div id="pomo-clock" class="pomo-clock">25:00</div>
-          <div id="pomo-bar" class="pomo-bar" aria-hidden="true"></div>
-          <div class="nap" aria-hidden="true"></div>
-          <label class="pomo-topic-row">学习内容
-            <input id="pomo-topic" type="text" maxlength="40" placeholder="例如:高数" autocomplete="off">
-          </label>
-          <div id="pomo-recent" class="row wrap"></div>
-          <div class="row">
-            <button type="button" id="pomo-start" class="btn primary" disabled>开始</button>
-            <button type="button" id="pomo-pause" class="btn" hidden>暂停</button>
-            <button type="button" id="pomo-resume" class="btn primary" hidden>继续</button>
-            <button type="button" id="pomo-abandon" class="btn" hidden>放弃</button>
-            <button type="button" id="pomo-skip" class="btn" hidden>跳过休息</button>
-          </div>
-          <p class="muted">学习 25 分钟,休息 5 分钟。中途放弃不计数。</p>
+      <section id="view-pomodoro" class="view" hidden aria-labelledby="pomodoro-title">
+        <div class="view-heading compact-heading"><div><span class="eyebrow">A LITTLE EVERY DAY</span><h1 id="pomodoro-title">专心做好眼前的事。</h1></div><span class="badge">学习 25 分钟 · 休息 5 分钟</span></div>
+        <div class="pomodoro-layout">
+          <section class="panel pomo-card">
+            <label class="field">这次学什么
+              <input id="pomoTopic" maxlength="60" placeholder="例如：高数、英语、阅读" autocomplete="off">
+            </label>
+            <div id="recentTopics" class="recent-topics" aria-label="最近主题"></div>
+            <div class="pomo-actions">
+              <button type="button" id="pomoStart" class="btn primary">开始学习</button>
+              <button type="button" id="pomoPause" class="btn" hidden>暂停</button>
+              <button type="button" id="pomoResume" class="btn primary" hidden>继续</button>
+              <button type="button" id="pomoFinish" class="btn" hidden>立即完成</button>
+              <button type="button" id="pomoAbandon" class="btn quiet" hidden>放弃当前段</button>
+              <button type="button" id="pomoSkip" class="btn quiet" hidden>跳过休息</button>
+            </div>
+            <p class="muted pomo-rule">走满 25 分钟或点“立即完成”，都计 1 个番茄钟；放弃不计数。</p>
+          </section>
+          <section class="pomo-clock-card" aria-live="polite">
+            <span id="pomoStatus" class="pomo-status">准备开始</span>
+            <strong id="pomoClock" class="pomo-clock">25:00</strong>
+            <p id="pomoCaption" class="pomo-caption">准备好了，就开始吧。</p>
+            <div class="pomo-progress" role="progressbar" aria-label="当前段进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="pomoProgress"></span></div>
+            <p class="pomo-today">今天已完成 <strong id="pomoToday">0</strong> 个</p>
+          </section>
         </div>
       </section>
 
-      <section id="view-stats" class="view" hidden>
-        <div class="stat-cards">
-          <div class="stat-card"><span class="stat-num" id="stat-today">0</span><span>今天</span></div>
-          <div class="stat-card"><span class="stat-num" id="stat-week">0</span><span>本周</span></div>
-          <div class="stat-card"><span class="stat-num" id="stat-total">0</span><span>全部</span></div>
+      <section id="view-stats" class="view" hidden aria-labelledby="stats-title">
+        <div class="view-heading"><div><span class="eyebrow">A LITTLE EVERY DAY</span><h1 id="stats-title">每一小段专注，都算数。</h1></div></div>
+        <div id="statCards" class="stat-cards"></div>
+        <div class="stat-columns">
+          <section class="panel"><h2 class="section-title">按学习内容</h2><div id="topicStats"></div><p id="topicStatsEmpty" class="muted">还没有已完成的番茄钟。</p></section>
+          <section class="panel"><h2 class="section-title">最近完成</h2><div id="recentStats"></div><p id="recentStatsEmpty" class="muted">完成一轮专注后，就会出现在这里。</p></section>
         </div>
-        <h2 class="sub">按学习内容</h2>
-        <table class="stat-table"><tbody id="stat-topics"></tbody></table>
-        <p id="stat-topics-empty" class="muted">还没有番茄钟记录</p>
-        <h2 class="sub">最近记录</h2>
-        <ul id="stat-recent" class="recent-list"></ul>
-        <p id="stat-recent-empty" class="muted">暂无</p>
+        <p class="muted stat-note">走满 25 分钟或点“立即完成”都记 1 个番茄钟；放弃和休息不计数。</p>
+      </section>
+
+      <section id="view-settings" class="view" hidden aria-labelledby="settings-title">
+        <div class="view-heading"><div><span class="eyebrow">MAKE IT YOURS</span><h1 id="settings-title">调成让你舒服的样子。</h1></div></div>
+        <div class="settings-grid">
+          <div class="settings-column">
+            <section class="panel settings-panel"><h2 class="section-title">主题</h2><div id="themeGrid" class="theme-grid" role="group" aria-label="七套主题"></div></section>
+            <section class="panel settings-panel"><h2 class="section-title">字体与小人</h2>
+              <div class="setting-row"><span>字体</span><div class="seg" id="fontChoices"><button type="button" data-font="pixel">像素字体</button><button type="button" data-font="system">系统字体</button></div></div>
+              <label class="setting-check"><input id="buddyToggle" type="checkbox">显示小人和气泡</label>
+              <div id="buddyOptions" class="setting-suboptions">
+                <div class="setting-row"><span>待机</span><div class="seg"><button type="button" data-idle="fixed">固定</button><button type="button" data-idle="random">随机</button></div></div>
+                <div class="setting-row"><span>表情</span><div class="seg" id="faceChoices"><button type="button" data-face="0">淡定</button><button type="button" data-face="1">斜眼</button><button type="button" data-face="2">眯眼笑</button><button type="button" data-face="3">高兴·害羞</button></div></div>
+                <div class="setting-row"><span>手势</span><div class="seg" id="poseChoices"><button type="button" data-pose="0">手垂两边</button><button type="button" data-pose="1">手握身前</button></div></div>
+              </div>
+              <label class="setting-check"><input id="animateToggle" type="checkbox">开启轻量动画</label>
+            </section>
+          </div>
+          <div class="settings-column">
+            <section class="panel settings-panel"><h2 class="section-title">声音</h2>
+              <div class="setting-row"><label for="soundSelect">提醒音</label><select id="soundSelect"><option value="clear-extended">通关加长版</option><option value="soft-pixel">柔和像素</option><option value="bubble-response">气泡回应</option></select><button type="button" id="soundPreview" class="btn primary small">试听</button></div>
+              <div class="setting-row"><label for="volumeRange">音量</label><input id="volumeRange" type="range" min="0" max="100" step="1"><output id="volumeValue">25%</output></div>
+              <div class="setting-row import-row"><button type="button" id="importSound" class="btn small">导入本地音频</button><span id="importName" class="muted">只保存在本机</span></div>
+              <p class="muted settings-note">选择声音后点试听。自然完成学习段时播放一次；手动完成不提醒。</p>
+            </section>
+            <section class="panel settings-panel"><h2 class="section-title">窗口</h2>
+              <label class="setting-check"><input id="alwaysOnTop" type="checkbox">角落小窗口置顶</label>
+              <label class="setting-check"><input id="autoStart" type="checkbox">开机启动</label>
+              <p id="dataSummary" class="muted settings-note"></p>
+            </section>
+          </div>
+        </div>
       </section>
     </main>
+
+    <footer class="app-footer">
+      <div id="footerBuddy" class="footer-buddy" aria-hidden="true"></div>
+      <div id="footerBubble" class="footer-bubble">先做一件就好，<br>我在这里陪你。</div>
+      <div class="footer-summary"><span class="muted">今天的专注</span><strong id="footerCount">0 个番茄钟</strong></div>
+    </footer>
   </div>
 
-  <div id="toast" class="toast" hidden>
-    <span id="toast-text"></span>
-    <button type="button" id="toast-undo" class="btn small">撤销</button>
-  </div>
-
-  <dialog id="edit-dialog">
-    <form method="dialog" id="edit-form" class="dialog-body">
-      <h2>编辑任务</h2>
-      <label>任务内容 <input id="edit-text" type="text" maxlength="200"></label>
-      <div class="field">优先级
-        <div class="seg" id="edit-priority" role="group" aria-label="优先级">
-          <button type="button" class="btn small" data-priority="high" aria-pressed="false">高</button>
-          <button type="button" class="btn small" data-priority="mid" aria-pressed="true">中</button>
-          <button type="button" class="btn small" data-priority="low" aria-pressed="false">低</button>
-        </div>
-      </div>
-      <div class="field">截止日期
-        <div class="row">
-          <input id="edit-due" type="date" aria-label="截止日期">
-          <button type="button" id="edit-due-clear" class="btn small">清空</button>
-        </div>
-      </div>
-      <div class="row end">
-        <button type="button" id="edit-cancel" class="btn">取消</button>
-        <button type="submit" id="edit-save" class="btn primary">保存</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="trash-dialog">
-    <div class="dialog-body">
-      <h2>回收站</h2>
-      <p class="muted">保留 7 天,过期自动清理</p>
-      <ul id="trash-list" class="task-list"></ul>
-      <p id="trash-empty" class="muted" hidden>回收站是空的</p>
-      <div class="row end">
-        <button type="button" id="trash-clear" class="btn">清空回收站</button>
-        <button type="button" id="trash-close" class="btn primary">关闭</button>
-      </div>
-    </div>
-  </dialog>
-
-  <dialog id="settings-dialog">
-    <div class="dialog-body">
-      <h2>设置</h2>
-      <label class="row"><input id="pref-top" type="checkbox"> 角落小窗口置顶</label>
-      <label>小窗口显示条数 <input id="pref-count" type="number" min="1" max="8"></label>
-      <p class="muted" id="data-summary"></p>
-      <div class="row end"><button type="button" id="settings-close" class="btn primary">关闭</button></div>
-    </div>
-  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden><span id="toastText"></span><button type="button" id="toastUndo" class="toast-undo" hidden>撤销</button></div>
+  <dialog id="editDialog"><form method="dialog" id="editForm" class="dialog-body"><h2>修改这件事</h2><label class="field">任务名称<input id="editText" maxlength="120" required></label><div class="dialog-fields"><label class="field">优先级<select id="editPriority"><option value="high">高优先</option><option value="mid">中优先</option><option value="low">低优先</option></select></label><label class="field">截止日期<input id="editDue" type="date"></label></div><div class="dialog-actions"><button type="button" id="editCancel" class="btn">取消</button><button type="submit" class="btn primary">保存</button></div></form></dialog>
 
   <script src="../shared/logic.js"></script>
-  <script src="../shared/anim.js"></script>
+  <script src="../shared/themes.js"></script>
+  <script src="../shared/appearance.js"></script>
+  <script src="app.js"></script>
   <script src="todo.js"></script>
   <script src="pomodoro.js"></script>
   <script src="stats.js"></script>
-  <script src="app.js"></script>
+  <script src="settings.js"></script>
 </body>
 </html>
+

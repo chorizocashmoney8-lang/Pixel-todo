@@ -1,11 +1,12 @@
 {
   "name": "pixel-todo-desktop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Pixel Todo 桌面版:待办清单 + 番茄钟",
   "main": "main/main.js",
   "scripts": {
     "start": "node run-dev.js",
-    "test": "node --test"
+    "test": "node --test",
+    "dist": "node --use-system-ca node_modules/electron-builder/cli.js --win --x64 --config.electronDist=node_modules/electron/dist"
   },
   "type": "commonjs",
   "private": true,

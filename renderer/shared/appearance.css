@@ -1,0 +1,7 @@
+@font-face{font-family:FP12;src:url('../../assets/fonts/fusion12.woff2') format('woff2');font-display:swap}
+:root{--paper:#efefef;--panel:#fafafa;--ink:#141414;--line:#141414;--muted:#777;--shadow:#555;--hi:#999;--danger:#cf3b3b;--mid:#b78429;--low:#4b7c9d}
+*{box-sizing:border-box}body,button,input,select{font-family:FP12,monospace}body.system-font,body.system-font button,body.system-font input,body.system-font select{font-family:system-ui,sans-serif}
+[hidden]{display:none!important}body{margin:0;color:var(--ink);background:var(--paper)}button{cursor:pointer}button:disabled{opacity:.5;cursor:default}button,input,select{color:inherit}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--hi);outline-offset:2px}
+.pixel-sprite svg{max-width:100%;image-rendering:pixelated;display:block}.pixel-sprite{flex-shrink:0}.pixel-sprite.focus{animation:buddy-focus 2s steps(2,end) infinite}.pixel-sprite.break{animation:buddy-rest 3s steps(2,end) infinite}
+@keyframes buddy-focus{50%{transform:translateY(-2px)}}@keyframes buddy-rest{50%{transform:translateY(2px)}}
+.reduce-motion *,.inactive *{animation-play-state:paused!important}

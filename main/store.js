@@ -7,11 +7,15 @@ const TRASH_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 
 function emptyState() {
   return {
-    version: 3,
+    version: 4,
     tasks: [],
     pomodoros: [],
     timer: { phase: 'idle', topic: '', endAt: null, pausedLeftMs: null },
-    prefs: { alwaysOnTop: false, widgetCount: 4, recentTopics: [] },
+    prefs: {
+      theme: 0, font: 'pixel', buddy: true, idleMode: 'fixed', face: 0, pose: 0,
+      animate: true, sound: 'clear-extended', volume: 25, autoStart: true,
+      alwaysOnTop: false, widgetCount: 4, recentTopics: [],
+    },
   };
 }
 
@@ -23,7 +27,7 @@ function clone(x) {
 function normalize(raw) {
   const base = emptyState();
   return {
-    version: 3,
+    version: 4,
     tasks: Array.isArray(raw.tasks) ? raw.tasks : base.tasks,
     pomodoros: Array.isArray(raw.pomodoros) ? raw.pomodoros : base.pomodoros,
     timer: Object.assign(base.timer, raw.timer),
@@ -59,6 +63,14 @@ function createStore(dir, now) {
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       fs.renameSync(file, file + '.corrupt-' + clock());
       return emptyState();
+    }
+    if (parsed.version === 3) {
+      // 固定备份名且排他创建:重启或迁移重试时都不覆盖原始 v3 文件。
+      try {
+        fs.copyFileSync(file, file + '.v3.bak', fs.constants.COPYFILE_EXCL);
+      } catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+      }
     }
     return normalize(parsed);
   }

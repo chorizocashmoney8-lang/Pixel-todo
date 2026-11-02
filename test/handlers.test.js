@@ -18,7 +18,7 @@ function setup() {
   const notify = () => { notified += 1; };
   const timer = createTimer(store, now, notify);
   const h = createHandlers(store, timer, now, notify);
-  return { clock, store, h, notified: () => notified };
+  return { clock, store, timer, h, notified: () => notified };
 }
 
 test('addTask:默认中优先级、无截止日期,文字去掉首尾空白', () => {
@@ -131,12 +131,23 @@ test('操作不存在的任务 id 不报错也不通知', () => {
 
 test('setPrefs 只接受白名单字段并校验取值', () => {
   const { store, h } = setup();
-  h.setPrefs({ alwaysOnTop: true, widgetCount: 3, widgetPos: { x: 10, y: 20 }, recentTopics: ['hack'], evil: 1 });
+  h.setPrefs({ theme: 6, font: 'system', buddy: false, idleMode: 'random', face: 3, pose: 1, animate: false, sound: 'custom', volume: 100, autoStart: false, alwaysOnTop: true, widgetCount: 3, widgetPos: { x: 10, y: 20 }, recentTopics: ['hack'], customSoundName: 'C:/private.wav', evil: 1 });
   const p = store.get().prefs;
   assert.strictEqual(p.alwaysOnTop, true);
+  assert.strictEqual(p.theme, 6);
+  assert.strictEqual(p.font, 'system');
+  assert.strictEqual(p.buddy, false);
+  assert.strictEqual(p.idleMode, 'random');
+  assert.strictEqual(p.face, 3);
+  assert.strictEqual(p.pose, 1);
+  assert.strictEqual(p.animate, false);
+  assert.strictEqual(p.sound, 'custom');
+  assert.strictEqual(p.volume, 100);
+  assert.strictEqual(p.autoStart, false);
   assert.strictEqual(p.widgetCount, 3);
   assert.deepStrictEqual(p.widgetPos, { x: 10, y: 20 });
   assert.deepStrictEqual(p.recentTopics, []);
+  assert.strictEqual(p.customSoundName, undefined);
   assert.strictEqual(p.evil, undefined);
 });
 
@@ -151,8 +162,94 @@ test('setPrefs 拒绝越界的小窗口条数和非法类型', () => {
   assert.strictEqual(p.alwaysOnTop, false);
 });
 
+test('setPrefs 严格拒绝所有超范围或错误类型的 v4 偏好', () => {
+  const { store, h } = setup();
+  h.setPrefs({ theme: 7, font: 'comic', buddy: 1, idleMode: 'sometimes', face: 4,
+    pose: -1, animate: 'false', sound: 'file:///private.wav', volume: 101,
+    autoStart: 0, widgetPos: { x: Infinity, y: 20 } });
+  const prefs = store.get().prefs;
+  assert.strictEqual(prefs.theme, 0);
+  assert.strictEqual(prefs.font, 'pixel');
+  assert.strictEqual(prefs.buddy, true);
+  assert.strictEqual(prefs.idleMode, 'fixed');
+  assert.strictEqual(prefs.face, 0);
+  assert.strictEqual(prefs.pose, 0);
+  assert.strictEqual(prefs.animate, true);
+  assert.strictEqual(prefs.sound, 'clear-extended');
+  assert.strictEqual(prefs.volume, 25);
+  assert.strictEqual(prefs.autoStart, true);
+  assert.strictEqual(prefs.widgetPos, undefined);
+});
+
+test('finishPomodoro handler 调用 timer.finishNow', () => {
+  const { timer, h } = setup();
+  let finished = 0;
+  timer.finishNow = () => { finished += 1; return true; };
+  assert.strictEqual(h.finishPomodoro(), true);
+  assert.strictEqual(finished, 1);
+});
+
+test('register 将 pomodoro:finish 接到 finishPomodoro', () => {
+  const { h } = setup();
+  const { register } = require('../main/ipc.js');
+  const routes = new Map();
+  register({ handle: (channel, fn) => routes.set(channel, fn) }, h);
+  assert.ok(routes.has('pomodoro:finish'));
+  h.startPomodoro('IPC finish');
+  assert.strictEqual(routes.get('pomodoro:finish')({}), true);
+  assert.strictEqual(h.getState().pomodoros[0].completion, 'manual');
+  assert.strictEqual(routes.get('pomodoro:finish')({}), false);
+});
+
 test('getState 返回当前完整状态', () => {
   const { h } = setup();
   h.addTask({ text: 'a' });
   assert.strictEqual(h.getState().tasks.length, 1);
+});
+
+
+test('setPrefs 验证所有新字段的边界,拒绝非对象及继承属性', () => {
+  const { store, h } = setup();
+  const allowed = {
+    theme: [0, 6], face: [0, 3], pose: [0, 1], font: ['pixel', 'system'],
+    buddy: [false, true], idleMode: ['fixed', 'random'], animate: [false, true],
+    sound: ['soft-pixel', 'clear-extended', 'bubble-response', 'custom'],
+    volume: [0, 12.5, 100], autoStart: [false, true],
+  };
+  for (const [key, values] of Object.entries(allowed)) {
+    for (const value of values) {
+      h.setPrefs({ [key]: value });
+      assert.strictEqual(store.get().prefs[key], value, key);
+    }
+  }
+  const before = store.get().prefs;
+  const invalid = {
+    theme: [-1, 7, 1.5, '1', null], face: [-1, 4, 1.5, '1', null],
+    pose: [-1, 2, 0.5, '1', null], font: ['other', 1, null],
+    buddy: [0, 'true', null], idleMode: ['other', 1, null],
+    animate: [0, 'false', null], sound: ['other', '/tmp/file.wav', 1, null],
+    volume: [-1, 101, NaN, Infinity, '50', null], autoStart: [0, 'true', null],
+  };
+  for (const [key, values] of Object.entries(invalid)) {
+    for (const value of values) {
+      h.setPrefs({ [key]: value });
+      assert.deepStrictEqual(store.get().prefs, before, key + ': ' + value);
+    }
+  }
+  for (const patch of [undefined, null, 1, 'bad', [], Object.assign([], { theme: 0 })]) {
+    assert.doesNotThrow(() => h.setPrefs(patch));
+    assert.deepStrictEqual(store.get().prefs, before);
+  }
+  h.setPrefs(Object.create({ theme: 0, alwaysOnTop: true }));
+  assert.deepStrictEqual(store.get().prefs, before);
+});
+
+test('prefs:set 无法覆盖音频 handler 已保存的名称及任意路径', () => {
+  const { store, h } = setup();
+  store.update(s => { s.prefs.customSoundName = 'trusted.wav'; });
+  h.setPrefs(JSON.parse('{"customSoundName":"C:/other.wav","customSoundPath":"C:/other.wav","soundPath":"C:/other.wav","__proto__":{"theme":6}}'));
+  assert.strictEqual(store.get().prefs.customSoundName, 'trusted.wav');
+  assert.strictEqual(store.get().prefs.customSoundPath, undefined);
+  assert.strictEqual(store.get().prefs.soundPath, undefined);
+  assert.strictEqual(store.get().prefs.theme, 0);
 });

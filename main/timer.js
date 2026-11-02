@@ -13,23 +13,44 @@ function idleTimer() {
 // onAlert(kind) 只在计时自然走完时调用:kind 为 focus-done 或 break-done。
 function createTimer(store, now, onChange, onAlert) {
   const alert = onAlert || function () {};
+  function deliverAlert(kind) {
+    try { alert(kind); }
+    catch (e) { console.error('番茄钟提醒失败,计数已保存:', e.message); }
+  }
   function apply(fn) {
     store.update(fn);
     onChange();
   }
 
-  function pushPomodoro(draft, topic, endedAt) {
-    const id = 'p_' + endedAt;
-    if (draft.pomodoros.some((p) => p.id === id)) return;
-    draft.pomodoros.push({ id: id, topic: topic, startedAt: endedAt - FOCUS_MS, endedAt: endedAt });
+  function startedAt(t, observedAt) {
+    if (Number.isFinite(t.startedAt)) return t.startedAt;
+    // v3 没有开始时间:学习段由 endAt 推算,暂停段由已用专注时间推算。
+    // 旧暂停时长无法还原,这里只使用已知时间,不把手动完成伪装成25分钟。
+    if (t.phase === 'focus' && Number.isFinite(t.endAt)) {
+      return Math.min(observedAt, t.endAt - FOCUS_MS);
+    }
+    const left = Number.isFinite(t.pausedLeftMs) ? t.pausedLeftMs : FOCUS_MS;
+    return observedAt - Math.max(0, Math.min(FOCUS_MS, FOCUS_MS - left));
+  }
+
+  function pushPomodoro(draft, t, endedAt, completion) {
+    const baseId = 'p_' + endedAt;
+    let id = baseId;
+    let suffix = 1;
+    while (draft.pomodoros.some((p) => p.id === id)) {
+      id = baseId + '_' + suffix;
+      suffix += 1;
+    }
+    draft.pomodoros.push({ id: id, topic: t.topic, startedAt: startedAt(t, endedAt), endedAt: endedAt, completion });
   }
 
   return {
     start(topic) {
       const name = String(topic).trim();
       if (name === '' || store.get().timer.phase !== 'idle') return false;
+      const startTime = now();
       apply((s) => {
-        s.timer = { phase: 'focus', topic: name, endAt: now() + FOCUS_MS, pausedLeftMs: null };
+        s.timer = { phase: 'focus', topic: name, startedAt: startTime, endAt: startTime + FOCUS_MS, pausedLeftMs: null };
         const rest = s.prefs.recentTopics.filter((t) => t !== name);
         s.prefs.recentTopics = [name].concat(rest).slice(0, RECENT_MAX);
       });
@@ -39,8 +60,10 @@ function createTimer(store, now, onChange, onAlert) {
     pause() {
       const t = store.get().timer;
       if (t.phase !== 'focus') return;
+      const pausedAt = now();
       apply((s) => {
-        s.timer.pausedLeftMs = Math.max(0, s.timer.endAt - now());
+        s.timer.startedAt = startedAt(s.timer, pausedAt);
+        s.timer.pausedLeftMs = Math.max(0, s.timer.endAt - pausedAt);
         s.timer.endAt = null;
         s.timer.phase = 'paused';
       });
@@ -48,8 +71,10 @@ function createTimer(store, now, onChange, onAlert) {
 
     resume() {
       if (store.get().timer.phase !== 'paused') return;
+      const resumedAt = now();
       apply((s) => {
-        s.timer.endAt = now() + s.timer.pausedLeftMs;
+        s.timer.startedAt = startedAt(s.timer, resumedAt);
+        s.timer.endAt = resumedAt + s.timer.pausedLeftMs;
         s.timer.pausedLeftMs = null;
         s.timer.phase = 'focus';
       });
@@ -59,6 +84,17 @@ function createTimer(store, now, onChange, onAlert) {
       const phase = store.get().timer.phase;
       if (phase !== 'focus' && phase !== 'paused') return;
       apply((s) => { s.timer = idleTimer(); });
+    },
+
+    finishNow() {
+      const t = store.get().timer;
+      if (t.phase !== 'focus' && t.phase !== 'paused') return false;
+      const endedAt = now();
+      apply((s) => {
+        pushPomodoro(s, t, endedAt, 'manual');
+        s.timer = { phase: 'break', topic: t.topic, endAt: endedAt + BREAK_MS, pausedLeftMs: null };
+      });
+      return true;
     },
 
     skipBreak() {
@@ -75,13 +111,13 @@ function createTimer(store, now, onChange, onAlert) {
       try {
         if (t.phase === 'focus') {
           apply((s) => {
-            pushPomodoro(s, t.topic, t.endAt);
+            pushPomodoro(s, t, t.endAt, 'timer');
             s.timer = { phase: 'break', topic: t.topic, endAt: t.endAt + BREAK_MS, pausedLeftMs: null };
           });
-          alert('focus-done');
+          deliverAlert('focus-done');
         } else if (t.phase === 'break') {
           apply((s) => { s.timer = idleTimer(); });
-          alert('break-done');
+          deliverAlert('break-done');
         }
       } catch (e) {
         console.error('番茄钟计时写盘失败,下一秒重试:', e.message);
@@ -94,7 +130,7 @@ function createTimer(store, now, onChange, onAlert) {
       const r = recoverTimer(t, now());
       if (r.timer === t) return;
       apply((s) => {
-        if (r.completed) pushPomodoro(s, r.completed.topic, r.completed.endedAt);
+        if (r.completed) pushPomodoro(s, t, r.completed.endedAt, 'timer');
         s.timer = r.timer;
       });
     },

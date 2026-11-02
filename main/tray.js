@@ -40,6 +40,7 @@ function buildIcon(inverted) {
 
 // 返回控制器。调用方必须在整个进程生命周期内持有它,否则 Tray 可能被垃圾回收,图标会凭空消失。
 function createTray(onOpen, onQuit) {
+  let flashTimer=null, endTimer=null;
   const normal = buildIcon(false);
   const alerted = buildIcon(true);
   const tray = new Tray(normal);
@@ -53,10 +54,15 @@ function createTray(onOpen, onQuit) {
   return {
     tray: tray,
     setAlert(message) {
+      clearInterval(flashTimer); clearTimeout(endTimer);
+      let inverted=true;
+      flashTimer=setInterval(()=>{ inverted=!inverted;tray.setImage(inverted?alerted:normal); },1000);
+      endTimer=setTimeout(()=>{ clearInterval(flashTimer); flashTimer=null;tray.setImage(normal); },10000);
       tray.setImage(alerted);
       tray.setToolTip('Pixel Todo - ' + message);
     },
     clearAlert() {
+      clearInterval(flashTimer);clearTimeout(endTimer);flashTimer=endTimer=null;
       tray.setImage(normal);
       tray.setToolTip('Pixel Todo');
     },

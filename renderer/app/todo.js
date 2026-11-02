@@ -1,229 +1,125 @@
-// 完整窗口 · 待办页。所有任务文字只用 textContent 写入。
-(function () {
-  var L = window.PixelLogic;
-  var api = window.pixelApi;
-  var PRI_LABEL = { high: '高', mid: '中', low: '低' };
-
-  var state = null;
-  var filter = 'all';
-  var editingId = null;
-  var editPriority = 'mid';
-  var toastTimer = null;
-  var undoFn = null;
-  var popId = null; // 刚被勾选的任务:重绘后在新复选框上播放弹跳
-
-  function $(id) { return document.getElementById(id); }
-
-  function el(tag, cls, text) {
-    var e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text !== undefined) e.textContent = text;
-    return e;
+(() => {
+  'use strict';
+  const A = window.PixelApp, { $, element: el, L } = A;
+  let filter = 'all', editingId = null, renderKey = '', lastState;
+  const priorities = { high: '高优先', mid: '中优先', low: '低优先' };
+  function taskAction(text, title, fn) {
+    const button = el('button', '', text);
+    button.type = 'button'; button.title = title; button.setAttribute('aria-label', title);
+    button.onclick = () => A.action(button, fn);
+    return button;
   }
-
-  function iconButton(label, glyph, onClick) {
-    var b = el('button', 'icon-btn', glyph);
-    b.type = 'button';
-    b.setAttribute('aria-label', label);
-    b.addEventListener('click', onClick);
-    return b;
+  function undoDelete(ids) {
+    return async () => {
+      for (const id of ids) await A.mutate('restoreTask', id);
+      A.toast('已恢复到待办列表。');
+    };
   }
-
-  function shake(node) {
-    node.classList.remove('shake');
-    void node.offsetWidth; // 重新触发动画
-    node.classList.add('shake');
+  function edit(task) {
+    editingId = task.id;
+    $('editText').value = task.text;
+    $('editPriority').value = task.priority;
+    $('editDue').value = task.dueDate || '';
+    $('editDialog').showModal();
+    $('editText').focus(); $('editText').select();
   }
-
-  function showToast(text, undo) {
-    $('toast-text').textContent = text;
-    undoFn = undo;
-    $('toast').hidden = false;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { $('toast').hidden = true; }, 6000);
-  }
-
-  function taskRow(t, today) {
-    var li = el('li', 'task pri-' + t.priority + (t.done ? ' done' : ''));
-    var check = el('input', 'check');
-    check.type = 'checkbox';
-    check.checked = t.done;
-    if (t.id === popId) check.classList.add('pop');
-    check.setAttribute('aria-label', '完成:' + t.text);
-    check.addEventListener('change', function () {
-      popId = t.id;
-      api.updateTask(t.id, { done: check.checked });
-    });
-    li.appendChild(check);
-
-    var body = el('div', 'task-body');
-    body.appendChild(el('span', 'task-text', t.text));
-    var meta = el('span', 'task-meta');
-    var tag = el('button', 'tag', PRI_LABEL[t.priority]);
-    tag.type = 'button';
-    tag.setAttribute('aria-label', '编辑优先级');
-    tag.addEventListener('click', function () { openEdit(t); });
-    meta.appendChild(tag);
-    if (t.dueDate) {
-      var label = L.dueLabel(t.dueDate, today);
-      var overdue = !t.done && t.dueDate < today;
-      meta.appendChild(el('span', 'due' + (overdue ? ' overdue' : ''), t.dueDate.slice(5) + ' · ' + label));
-    }
-    body.appendChild(meta);
-    li.appendChild(body);
-
-    li.appendChild(iconButton('编辑', '✎', function () { openEdit(t); }));
-    li.appendChild(iconButton('删除', '×', function () {
-      api.deleteTask(t.id);
-      showToast('已删除「' + L.truncateText(t.text, 10) + '」', function () { api.restoreTask(t.id); });
-    }));
-    return li;
-  }
-
-  function renderList() {
-    var today = L.todayString(new Date());
-    var live = state.tasks.filter(function (t) { return t.deletedAt === null; });
-    var doneCount = live.filter(function (t) { return t.done; }).length;
-    $('counts').textContent = '未完成 ' + (live.length - doneCount) + '   已完成 ' + doneCount + '   全部 ' + live.length;
-
-    var shown = live.filter(function (t) {
-      return filter === 'all' || (filter === 'done' ? t.done : !t.done);
-    });
-    var list = $('task-list');
-    list.textContent = '';
-    L.sortTasks(shown).forEach(function (t) { list.appendChild(taskRow(t, today)); });
-    $('task-empty').hidden = shown.length > 0;
-    $('trash-count').textContent = String(state.tasks.length - live.length);
-    popId = null;
-  }
-
-  function renderTrash() {
-    var trashed = state.tasks.filter(function (t) { return t.deletedAt !== null; });
-    var list = $('trash-list');
-    list.textContent = '';
-    trashed.forEach(function (t) {
-      var li = el('li', 'task pri-' + t.priority);
-      var body = el('div', 'task-body');
-      body.appendChild(el('span', 'task-text', t.text));
-      li.appendChild(body);
-      var restore = el('button', 'btn small', '恢复');
-      restore.type = 'button';
-      restore.addEventListener('click', function () { api.restoreTask(t.id); });
-      var purge = el('button', 'btn small', '彻底删除');
-      purge.type = 'button';
-      purge.addEventListener('click', function () { api.purgeTask(t.id); });
-      li.appendChild(restore);
-      li.appendChild(purge);
-      list.appendChild(li);
-    });
-    $('trash-empty').hidden = trashed.length > 0;
-  }
-
-  function setPriority(p) {
-    editPriority = p;
-    Array.prototype.forEach.call($('edit-priority').querySelectorAll('button'), function (b) {
-      b.setAttribute('aria-pressed', String(b.dataset.priority === p));
-    });
-  }
-
-  function openEdit(t) {
-    editingId = t.id;
-    $('edit-text').value = t.text;
-    $('edit-due').value = t.dueDate || '';
-    setPriority(t.priority);
-    $('edit-dialog').showModal();
-    $('edit-text').focus();
-  }
-
-  function saveEdit() {
-    if (L.isBlankText($('edit-text').value)) {
-      shake($('edit-text'));
+  function render(state) {
+    lastState = state;
+    const live = state.tasks.filter(t => t.deletedAt == null);
+    const trash = state.tasks.filter(t => t.deletedAt != null);
+    const done = live.filter(t => t.done);
+    $('taskProgress').textContent = `${done.length} / ${live.length}`;
+    const counts = { all: live.length, open: live.length - done.length, done: done.length, trash: trash.length };
+    for (const [name, total] of Object.entries(counts)) $('count' + name[0].toUpperCase() + name.slice(1)).textContent = total;
+    document.querySelectorAll('[data-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.filter === filter)));
+    const clear = $('clearDone');
+    clear.textContent = filter === 'trash' ? '清空回收站' : '清除已完成';
+    clear.disabled = Boolean(clear.dataset.busy) || (filter === 'trash' ? !trash.length : !done.length);
+    const key = JSON.stringify([filter, state.tasks, L.todayString(new Date())]);
+    if (key === renderKey) {
+      // Reconcile a checkbox if the host rejected its update without broadcasting state.
+      document.querySelectorAll('.task-row .task-check').forEach(check => {
+        const task = state.tasks.find(t => t.id === check.closest('.task-row').dataset.id);
+        if (task) check.checked = task.done;
+      });
       return;
     }
-    api.updateTask(editingId, {
-      text: $('edit-text').value,
-      priority: editPriority,
-      dueDate: $('edit-due').value || null,
-    });
-    $('edit-dialog').close();
-  }
-
-  function bind() {
-    $('add-form').addEventListener('submit', function (e) {
-      e.preventDefault();
-      var input = $('add-input');
-      if (L.isBlankText(input.value)) {
-        shake(input);
-        return;
-      }
-      api.addTask({ text: input.value });
-      input.value = '';
-    });
-
-    Array.prototype.forEach.call(document.querySelectorAll('[data-filter]'), function (b) {
-      b.addEventListener('click', function () {
-        filter = b.dataset.filter;
-        Array.prototype.forEach.call(document.querySelectorAll('[data-filter]'), function (o) {
-          o.setAttribute('aria-pressed', String(o === b));
+    renderKey = key;
+    const tasks = L.sortTasks(filter === 'trash' ? trash : live.filter(t => filter === 'all' || (filter === 'done' ? t.done : !t.done)));
+    const list = $('taskList'); list.replaceChildren();
+    $('taskEmpty').hidden = tasks.length > 0;
+    $('taskEmpty').textContent = ({ all: '还没有任务，写下今天想完成的一件事吧。', open: '未完成的事都做完啦，歇一会儿吧。', done: '还没有完成的任务，先从一件小事开始。', trash: '回收站是空的。删除的任务会保留 7 天。' })[filter];
+    if (filter === 'trash' && tasks.length) list.append(el('p', 'trash-note', '删除的任务保留 7 天；恢复后会回到原来的完成状态。'));
+    tasks.forEach(task => {
+      const row = el('article', 'task-row' + (task.done ? ' done' : ''));
+      row.dataset.id = task.id;
+      row.style.setProperty('--priority', `var(--priority-${task.priority}, var(--muted))`);
+      if (filter !== 'trash') {
+        const check = el('input', 'task-check'); check.type = 'checkbox'; check.checked = task.done;
+        check.setAttribute('aria-label', (task.done ? '标为未完成：' : '完成：') + task.text);
+        check.onchange = () => A.action(check, async () => {
+          await A.mutate('updateTask', task.id, { done: check.checked });
+          if (check.checked) A.toast('又完成一件，做得很好。');
         });
-        renderList();
-      });
-    });
-
-    $('clear-done').addEventListener('click', function () {
-      var ids = state.tasks.filter(function (t) { return t.done && t.deletedAt === null; })
-        .map(function (t) { return t.id; });
-      if (ids.length === 0) return;
-      api.clearDone();
-      showToast('已清除 ' + ids.length + ' 项已完成', function () { ids.forEach(api.restoreTask); });
-    });
-
-    $('toast-undo').addEventListener('click', function () {
-      if (undoFn) undoFn();
-      undoFn = null;
-      $('toast').hidden = true;
-    });
-
-    $('open-trash').addEventListener('click', function () { renderTrash(); $('trash-dialog').showModal(); });
-    $('trash-close').addEventListener('click', function () { $('trash-dialog').close(); });
-    $('trash-clear').addEventListener('click', function () { api.emptyTrash(); });
-
-    Array.prototype.forEach.call($('edit-priority').querySelectorAll('button'), function (b) {
-      b.addEventListener('click', function () { setPriority(b.dataset.priority); });
-    });
-    $('edit-due-clear').addEventListener('click', function () { $('edit-due').value = ''; });
-    $('edit-cancel').addEventListener('click', function () { $('edit-dialog').close(); });
-    $('edit-form').addEventListener('submit', function (e) { e.preventDefault(); saveEdit(); });
-    $('edit-dialog').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveEdit(); }
-    });
-
-    document.addEventListener('keydown', function (e) {
-      var tag = document.activeElement && document.activeElement.tagName;
-      if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA' && !$('view-todo').hidden) {
-        e.preventDefault();
-        $('add-input').focus();
+        row.append(check);
       }
+      const detail = el('div', 'task-detail');
+      const title = el('div', 'task-title', task.text);
+      const meta = el('div', 'task-meta');
+      meta.append(el('span', 'priority', priorities[task.priority] || '中优先'));
+      if (task.dueDate) {
+        const due = el('span', '', task.dueDate + ' · ' + L.dueLabel(task.dueDate, L.todayString(new Date())));
+        meta.append(due);
+      } else meta.append(el('span', '', '不设日期'));
+      detail.append(title, meta); row.append(detail);
+      const actions = el('div', 'task-actions');
+      if (filter === 'trash') {
+        actions.append(taskAction('恢复', '恢复：' + task.text, async () => { await A.mutate('restoreTask', task.id); A.toast('已恢复到待办列表。'); }));
+        actions.append(taskAction('彻底删除', '彻底删除：' + task.text, async () => {
+          if (window.confirm('彻底删除这件事？删除后无法恢复。')) { await A.mutate('purgeTask', task.id); A.toast('已彻底删除。'); }
+        }));
+      } else {
+        actions.append(taskAction('编辑', '编辑：' + task.text, () => edit(task)));
+        actions.append(taskAction('×', '删除：' + task.text, async () => { await A.mutate('deleteTask', task.id); A.toast('已移到回收站。', undoDelete([task.id])); }));
+        title.ondblclick = () => edit(task);
+      }
+      row.append(actions); list.append(row);
     });
-
-    // 过了午夜,"今天截止/明天/已过期"要重算。
-    function scheduleMidnight() {
-      var now = new Date();
-      var next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
-      setTimeout(function () { if (state) renderList(); scheduleMidnight(); }, next - now);
-    }
-    scheduleMidnight();
-    document.addEventListener('visibilitychange', function () { if (state && !document.hidden) renderList(); });
   }
-
-  bind();
-
-  window.PixelViews = window.PixelViews || {};
-  window.PixelViews.todo = {
-    render: function (next) {
-      state = next;
-      renderList();
-      if ($('trash-dialog').open) renderTrash();
-    },
+  A.views.todo = {
+    init() {
+      document.querySelectorAll('[data-filter]').forEach(button => button.onclick = () => { filter = button.dataset.filter; if (A.state) render(A.state); });
+      $('addForm').onsubmit = event => {
+        event.preventDefault();
+        const text = $('taskInput').value.trim(); if (!text) { $('taskInput').focus(); return; }
+        const button = $('addForm').querySelector('[type=submit]');
+        const input = { text, priority: $('newPriority').value, dueDate: $('newDue').value || null };
+        A.action(button, async () => {
+          await A.mutate('addTask', input);
+          if ($('taskInput').value.trim() === text) $('taskInput').value = '';
+          filter = 'all'; render(A.state); $('taskInput').focus();
+        }, '添加失败。');
+      };
+      $('clearDone').onclick = () => A.action($('clearDone'), async () => {
+        if (filter === 'trash') {
+          if (window.confirm('清空回收站？其中的任务将无法恢复。')) { await A.mutate('emptyTrash'); A.toast('回收站已清空。'); }
+        } else {
+          const ids = lastState.tasks.filter(t => t.deletedAt == null && t.done).map(t => t.id);
+          await A.mutate('clearDone'); A.toast(`已将 ${ids.length} 件已完成任务移到回收站。`, undoDelete(ids));
+        }
+      });
+      $('editCancel').onclick = () => $('editDialog').close();
+      $('editDialog').addEventListener('close', () => { editingId = null; });
+      $('editForm').onsubmit = event => {
+        event.preventDefault();
+        const text = $('editText').value.trim(); if (!text || !editingId) return;
+        const id = editingId;
+        if (!A.state.tasks.some(t => t.id === id && t.deletedAt == null)) { $('editDialog').close(); A.toast('这件事已被删除，请到回收站查看。'); return; }
+        A.action($('editForm').querySelector('[type=submit]'), async () => {
+          await A.mutate('updateTask', id, { text, priority: $('editPriority').value, dueDate: $('editDue').value || null });
+          $('editDialog').close(); A.toast('修改已保存。');
+        }, '保存失败。');
+      };
+    }, render
   };
 })();
