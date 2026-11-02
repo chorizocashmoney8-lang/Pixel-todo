@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+  <title>Pixel Todo</title>
+  <link rel="stylesheet" href="../shared/pixel.css">
+  <link rel="stylesheet" href="../shared/anim.css">
+  <link rel="stylesheet" href="widget.css">
+</head>
+<body>
+  <div class="px frame">
+    <div class="face">
+      <div class="inner">
+        <div class="bar"><span class="title">PIXEL·TODO</span></div>
+        <div id="pomodoro" class="pomodoro" hidden></div>
+        <ul id="list" class="list"></ul>
+        <p id="empty" class="empty" hidden>暂无待办</p>
+        <button id="open" class="open" type="button">打开 &gt;</button>
+      </div>
+    </div>
+  </div>
+  <script src="../shared/logic.js"></script>
+  <script src="../shared/anim.js"></script>
+  <script src="widget.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+body { padding: 4px 6px 6px 4px; }
+.frame, .face, .inner { height: 100%; }
+.inner { display: flex; flex-direction: column; gap: 4px; }
+
+/* 标题条是窗口唯一的拖动区域;列表区域留给点击。 */
+.bar { -webkit-app-region: drag; cursor: move; border-bottom: 2px solid var(--ink); padding-bottom: 2px; }
+.title { font-weight: bold; font-size: 12px; }
+
+.pomodoro { font-size: 12px; font-weight: bold; background: var(--ink); color: var(--white); padding: 0 6px; }
+
+.list { list-style: none; margin: 0; padding: 0; flex: 1; overflow: hidden; }
+.list li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 1px 0; }
+.list li::before { content: "▍"; margin-right: 2px; }
+.empty { margin: 0; flex: 1; color: var(--gray); }
+
+.open {
+  font: inherit; font-size: 12px; cursor: pointer;
+  border: 2px solid var(--ink); background: var(--paper-2); padding: 0 6px; align-self: flex-end;
+}
+.open:hover { background: var(--ink); color: var(--white); }

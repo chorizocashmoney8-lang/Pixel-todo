@@ -1,0 +1,46 @@
+{
+  "name": "pixel-todo-desktop",
+  "version": "1.0.0",
+  "description": "Pixel Todo 桌面版:待办清单 + 番茄钟",
+  "main": "main/main.js",
+  "scripts": {
+    "start": "node run-dev.js",
+    "test": "node --test"
+  },
+  "type": "commonjs",
+  "private": true,
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "local.pixel-todo",
+    "productName": "Pixel Todo",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main/**",
+      "preload/**",
+      "renderer/**",
+      "assets/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true
+    }
+  }
+}

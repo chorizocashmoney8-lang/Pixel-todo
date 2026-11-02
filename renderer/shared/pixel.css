@@ -1,0 +1,58 @@
+/* 像素风基础:黑灰白配色、阶梯切角、硬边阴影。取自旧版 style.css 并精简。 */
+:root {
+  color-scheme: light;
+  --ink: #111111;
+  --ink-2: #2f2f2f;
+  --gray: #8f8f8f;
+  --gray-2: #c2c2c2;
+  --paper: #f2f2f2;
+  --paper-2: #e7e7e7;
+  --white: #ffffff;
+  --pri-high: #d93a3a;
+  --pri-mid: #c08410;
+  --pri-low: #3f7cc0;
+  --px: 4px;
+  --bw: 3px;
+  --font: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, "Courier New",
+    "Microsoft YaHei", monospace, sans-serif;
+  --clip: polygon(
+    0 var(--px), var(--px) var(--px), var(--px) 0,
+    calc(100% - var(--px)) 0, calc(100% - var(--px)) var(--px), 100% var(--px),
+    100% calc(100% - var(--px)), calc(100% - var(--px)) calc(100% - var(--px)),
+    calc(100% - var(--px)) 100%, var(--px) 100%,
+    var(--px) calc(100% - var(--px)), 0 calc(100% - var(--px))
+  );
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; height: 100%; }
+
+body {
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: .03em;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(rgba(0, 0, 0, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, .045) 1px, transparent 1px);
+  background-size: 16px 16px;
+  background-position: -1px -1px;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* 像素切角面板:外层 .px 投硬边阴影,内层 .face 切角(clip-path 会把 box-shadow 一起剪掉)。 */
+.px { filter: drop-shadow(3px 3px 0 var(--ink)); }
+.face {
+  clip-path: var(--clip);
+  background: var(--ink);
+  padding: var(--bw);
+}
+.face > .inner {
+  clip-path: var(--clip);
+  background: var(--white);
+  padding: 8px 10px;
+}

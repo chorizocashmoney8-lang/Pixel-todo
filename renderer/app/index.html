@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+  <title>Pixel Todo</title>
+  <link rel="stylesheet" href="../shared/pixel.css">
+  <link rel="stylesheet" href="../shared/anim.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <h1>PIXEL·TODO</h1>
+      <nav class="tabs" aria-label="页面">
+        <button type="button" class="tab" data-view="todo" aria-pressed="true">待办</button>
+        <button type="button" class="tab" data-view="pomodoro" aria-pressed="false">番茄钟</button>
+        <button type="button" class="tab" data-view="stats" aria-pressed="false">统计</button>
+      </nav>
+      <button type="button" id="settings-btn" class="icon-btn" aria-label="设置">⚙</button>
+    </header>
+
+    <main>
+      <section id="view-todo" class="view">
+        <form id="add-form" class="add-form" autocomplete="off">
+          <input id="add-input" type="text" placeholder="> 输入任务,回车添加  ( / 聚焦 )" aria-label="新任务">
+          <button type="submit" class="btn">添加</button>
+        </form>
+        <div class="counts" id="counts"></div>
+        <div class="toolbar">
+          <div class="filters" role="group" aria-label="筛选">
+            <button type="button" class="btn small" data-filter="all" aria-pressed="true">全部</button>
+            <button type="button" class="btn small" data-filter="active" aria-pressed="false">未完成</button>
+            <button type="button" class="btn small" data-filter="done" aria-pressed="false">已完成</button>
+          </div>
+          <div class="actions">
+            <button type="button" id="clear-done" class="btn small">清除已完成</button>
+            <button type="button" id="open-trash" class="btn small">回收站 <span id="trash-count">0</span></button>
+          </div>
+        </div>
+        <ul id="task-list" class="task-list"></ul>
+        <p id="task-empty" class="muted" hidden>还没有任务</p>
+      </section>
+
+      <section id="view-pomodoro" class="view" hidden data-phase="idle">
+        <div class="pomo-card">
+          <div id="pomo-phase" class="pomo-phase">待开始</div>
+          <div id="pomo-clock" class="pomo-clock">25:00</div>
+          <div id="pomo-bar" class="pomo-bar" aria-hidden="true"></div>
+          <div class="nap" aria-hidden="true"></div>
+          <label class="pomo-topic-row">学习内容
+            <input id="pomo-topic" type="text" maxlength="40" placeholder="例如:高数" autocomplete="off">
+          </label>
+          <div id="pomo-recent" class="row wrap"></div>
+          <div class="row">
+            <button type="button" id="pomo-start" class="btn primary" disabled>开始</button>
+            <button type="button" id="pomo-pause" class="btn" hidden>暂停</button>
+            <button type="button" id="pomo-resume" class="btn primary" hidden>继续</button>
+            <button type="button" id="pomo-abandon" class="btn" hidden>放弃</button>
+            <button type="button" id="pomo-skip" class="btn" hidden>跳过休息</button>
+          </div>
+          <p class="muted">学习 25 分钟,休息 5 分钟。中途放弃不计数。</p>
+        </div>
+      </section>
+
+      <section id="view-stats" class="view" hidden>
+        <div class="stat-cards">
+          <div class="stat-card"><span class="stat-num" id="stat-today">0</span><span>今天</span></div>
+          <div class="stat-card"><span class="stat-num" id="stat-week">0</span><span>本周</span></div>
+          <div class="stat-card"><span class="stat-num" id="stat-total">0</span><span>全部</span></div>
+        </div>
+        <h2 class="sub">按学习内容</h2>
+        <table class="stat-table"><tbody id="stat-topics"></tbody></table>
+        <p id="stat-topics-empty" class="muted">还没有番茄钟记录</p>
+        <h2 class="sub">最近记录</h2>
+        <ul id="stat-recent" class="recent-list"></ul>
+        <p id="stat-recent-empty" class="muted">暂无</p>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" hidden>
+    <span id="toast-text"></span>
+    <button type="button" id="toast-undo" class="btn small">撤销</button>
+  </div>
+
+  <dialog id="edit-dialog">
+    <form method="dialog" id="edit-form" class="dialog-body">
+      <h2>编辑任务</h2>
+      <label>任务内容 <input id="edit-text" type="text" maxlength="200"></label>
+      <div class="field">优先级
+        <div class="seg" id="edit-priority" role="group" aria-label="优先级">
+          <button type="button" class="btn small" data-priority="high" aria-pressed="false">高</button>
+          <button type="button" class="btn small" data-priority="mid" aria-pressed="true">中</button>
+          <button type="button" class="btn small" data-priority="low" aria-pressed="false">低</button>
+        </div>
+      </div>
+      <div class="field">截止日期
+        <div class="row">
+          <input id="edit-due" type="date" aria-label="截止日期">
+          <button type="button" id="edit-due-clear" class="btn small">清空</button>
+        </div>
+      </div>
+      <div class="row end">
+        <button type="button" id="edit-cancel" class="btn">取消</button>
+        <button type="submit" id="edit-save" class="btn primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="trash-dialog">
+    <div class="dialog-body">
+      <h2>回收站</h2>
+      <p class="muted">保留 7 天,过期自动清理</p>
+      <ul id="trash-list" class="task-list"></ul>
+      <p id="trash-empty" class="muted" hidden>回收站是空的</p>
+      <div class="row end">
+        <button type="button" id="trash-clear" class="btn">清空回收站</button>
+        <button type="button" id="trash-close" class="btn primary">关闭</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="settings-dialog">
+    <div class="dialog-body">
+      <h2>设置</h2>
+      <label class="row"><input id="pref-top" type="checkbox"> 角落小窗口置顶</label>
+      <label>小窗口显示条数 <input id="pref-count" type="number" min="1" max="8"></label>
+      <p class="muted" id="data-summary"></p>
+      <div class="row end"><button type="button" id="settings-close" class="btn primary">关闭</button></div>
+    </div>
+  </dialog>
+
+  <script src="../shared/logic.js"></script>
+  <script src="../shared/anim.js"></script>
+  <script src="todo.js"></script>
+  <script src="pomodoro.js"></script>
+  <script src="stats.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

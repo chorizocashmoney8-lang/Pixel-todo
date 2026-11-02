@@ -1,0 +1,30 @@
+/* 像素动画:全部用 steps() 逐帧,不用平滑插值。窗口隐藏时由 anim.js 加 .paused 暂停。 */
+.paused *, .paused *::before, .paused *::after { animation-play-state: paused !important; }
+
+/* 学习段:进度条最后一格闪烁,表示正在推进 */
+.pomo-bar span.on.head { animation: blink 1s steps(2, jump-none) infinite; }
+@keyframes blink { 0% { background: var(--ink); } 100% { background: var(--gray); } }
+
+/* 休息段:一个打盹的像素小方块,上下两帧循环 */
+.nap { display: none; width: 8px; height: 8px; background: var(--ink); margin: 6px 0;
+  box-shadow: 16px 0 0 var(--ink), 24px 0 0 var(--ink), 8px 8px 0 var(--ink); }
+#view-pomodoro[data-phase="break"] .nap { display: block; animation: nap 1.2s steps(2, jump-none) infinite; }
+@keyframes nap { 0% { transform: translateY(0); } 100% { transform: translateY(4px); } }
+
+/* 完成一个番茄钟:卡片短暂闪两下 */
+.pomo-card.flash { animation: flash .6s steps(4, end) 1; }
+@keyframes flash { 0%, 50% { background: var(--ink); color: var(--white); } 25%, 75%, 100% { background: var(--white); color: var(--ink); } }
+
+/* 勾选任务:复选框做一次像素弹跳 */
+.check.pop { animation: pop .3s steps(3, end) 1; }
+@keyframes pop { 0% { transform: scale(1); } 33% { transform: scale(1.35); } 66% { transform: scale(.85); } 100% { transform: scale(1); } }
+
+/* 小窗口:番茄钟运行时那一行的小圆点闪烁 */
+.pomodoro.running::before { content: "■ "; animation: blink 1s steps(2, jump-none) infinite; }
+
+/* 小窗口:番茄钟走完时整体反色闪几下 */
+.inner.alert { animation: alert-flash 3s steps(1, end) 1; }
+@keyframes alert-flash {
+  0%, 20%, 40%, 60%, 80% { background: var(--ink); color: var(--white); }
+  10%, 30%, 50%, 70%, 90%, 100% { background: var(--white); color: var(--ink); }
+}
