@@ -16,3 +16,10 @@ dist/
 # 操作系统文件
 .DS_Store
 Thumbs.db
+# Personal runtime data if manually copied into the repository
+pixel-todo.json
+pixel-todo.json.v3.bak
+sounds/custom-sound.json
+*.lnk
+
+dist-build/

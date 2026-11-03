@@ -1,4 +1,4 @@
-> 1.1.0软件仓库文档快照。此轮来源为Vibecoding/docs/PRD.md;后续更新需与正式实现同步。
+> 1.0.0正式发布文档快照。此轮来源为Vibecoding/docs/PRD.md;后续更新需与正式实现同步。
 
 # PRD · Pixel Todo 桌面版
 

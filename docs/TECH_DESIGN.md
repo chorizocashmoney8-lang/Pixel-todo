@@ -1,4 +1,4 @@
-> 1.1.0软件仓库文档快照。此轮来源为Vibecoding/docs/TECH_DESIGN.md;后续更新需与正式实现同步。
+> 1.0.0正式发布文档快照。此轮来源为Vibecoding/docs/TECH_DESIGN.md;后续更新需与正式实现同步。
 
 # 技术设计 · Pixel Todo 桌面版
 
@@ -6,7 +6,7 @@
 
 ## 1. 技术栈与目录
 
-- Electron,目标 Windows 10/11;electron-builder NSIS 安装包。
+- Electron,目标 Windows 10/11;electron-builder NSIS 安装包,交互安装允许用户选择目录,并提供创建桌面快捷方式的复选项。
 - 不引入前端框架;主进程 CommonJS,渲染层原生 JavaScript。
 - 源码位于 `working/pixel-todo-desktop/`;用户验收的最终安装包位于 `deliverables/`。
 - 使用 `node:test`;安全边界为 `contextIsolation: true`、`nodeIntegration: false`,通过 preload 白名单 IPC。
